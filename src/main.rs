@@ -127,7 +127,7 @@ fn main() -> ! {
             ALLOCATOR.lock().init(sheap, heap_size);
         }
         // print! and println! depend on the following step
-        // TODO: init_legacy_stdio_embedded_hal(xs-serial);
+        // Init Serial
         struct Serial;
         impl Serial {
             pub fn new() -> Self {
@@ -156,7 +156,8 @@ fn main() -> ! {
         }
         let serial = Serial::new();
         rustsbi::legacy_stdio::init_legacy_stdio_embedded_hal(serial);
-        // TODO: init_ipi(xs-clint)
+
+        // Init IPI
         struct Ipi;
         impl rustsbi::Ipi for Ipi {
             fn max_hart_id(&self) -> usize {
@@ -173,7 +174,8 @@ fn main() -> ! {
             }
         }
         rustsbi::init_ipi(Ipi);
-        // TODO: init_timer(xs-clint)
+
+        // Init Timer
         struct Timer;
         impl rustsbi::Timer for Timer {
             fn set_timer(&mut self, stime_value: u64) {
@@ -185,8 +187,16 @@ fn main() -> ! {
             }
         }
         rustsbi::init_timer(Timer);
-        // TODO: init_reset(xs-reset)
-
+        // Init Reset
+        struct Reset;
+        impl rustsbi::Reset for Reset {
+            fn system_reset(&self, reset_type: usize, reset_reason: usize) -> rustsbi::SbiRet {
+                println!("[rustsbi] reset triggered! todo: shutdown all harts on XS; program halt. Type: {}, reason: {}", reset_type, reset_reason);
+                loop {}
+            }
+        }
+        use rustsbi::init_reset;
+        init_reset(Reset);
     }
 
     // set mideleg
