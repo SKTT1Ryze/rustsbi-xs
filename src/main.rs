@@ -166,9 +166,10 @@ fn main() -> ! {
                 1
             }
             fn send_ipi_many(&mut self, hart_mask: rustsbi::HartMask) {
-                let clint = unsafe { xs_hal::Clint::new() };
+                
                 for i in 0..=self.max_hart_id() {
                     if hart_mask.has_bit(i) {
+                        let clint = unsafe { xs_hal::Clint::new() };
                         clint.send_soft(i);
                         clint.clear_soft(i);
                     }
@@ -385,27 +386,51 @@ extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             // 操作系统执行非法指令会陷入到这里
-            // TODO: handle debug instruction
-            // #[inline]
-            // unsafe fn get_vaddr_u32(vaddr: usize) -> u32 {
-            //     let mut ans: u32;
-            //     llvm_asm!("
-            //         li      t0, (1 << 17)
-            //         mv      t1, $1
-            //         csrrs   t0, mstatus, t0
-            //         lwu     t1, 0(t1)
-            //         csrw    mstatus, t0
-            //         mv      $0, t1
-            //     "
-            //         :"=r"(ans) 
-            //         :"r"(vaddr)
-            //         :"t0", "t1");
-            //     ans
-            // }
-            // // Decode illegal instruction
-            // let va = mepc::read();
-            // let instr = unsafe { get_vaddr_u32(va) };
-            todo!()
+            #[inline]
+            unsafe fn get_vaddr_u32(vaddr: usize) -> u32 {
+                let mut ans: u32;
+                llvm_asm!("
+                    li      t0, (1 << 17)
+                    mv      t1, $1
+                    csrrs   t0, mstatus, t0
+                    lwu     t1, 0(t1)
+                    csrw    mstatus, t0
+                    mv      $0, t1
+                "
+                    :"=r"(ans) 
+                    :"r"(vaddr)
+                    :"t0", "t1");
+                ans
+            }
+            // Decode illegal instruction
+            let va = mepc::read();
+            let instr = unsafe { get_vaddr_u32(va) };
+            if instr & 0xFFFFF07F == 0xC0102073 {
+                // rdtime instruction
+                let rd = ((instr >> 7) & 0b1_1111) as u8;
+                let clint = unsafe { xs_hal::Clint::new() };
+                let mtime = clint.get_mtime() as usize;
+                match rd {
+                    10 => trapframe.a0 = mtime,
+                    11 => trapframe.a1 = mtime,
+                    12 => trapframe.a2 = mtime,
+                    13 => trapframe.a3 = mtime,
+                    14 => trapframe.a4 = mtime,
+                    15 => trapframe.a5 = mtime,
+                    16 => trapframe.a6 = mtime,
+                    17 => trapframe.a7 = mtime,
+                    5 => trapframe.t0 = mtime,
+                    6 => trapframe.t1 = mtime,
+                    7 => trapframe.t2 = mtime,
+                    28 => trapframe.t3 = mtime,
+                    29 => trapframe.t4 = mtime,
+                    30 => trapframe.t5 = mtime,
+                    31 => trapframe.t6 = mtime,
+                    _ => panic!("invalid target"),
+                }
+                // Skip instruction
+                mepc::write(mepc::read().wrapping_add(4));
+            }
         }
         unknown_cause => panic!(
             "Unhandled exception! mcause: {:?}, mepc: {:016x?}, mtval: {:016x?}, trapframe: {:p}, {:x?}",
