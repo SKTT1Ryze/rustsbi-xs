@@ -58,7 +58,7 @@ pub extern "C" fn mp_hook() -> bool {
 }
 
 #[export_name = "_start"]
-#[link_section = ".text.entry"]
+#[link_section = ".init"]
 #[naked]
 unsafe extern "C" fn start() -> ! {
     // Ref: https://github.com/luojia65/rustsbi/blob/master/platform/qemu/src/main.rs
@@ -85,7 +85,7 @@ unsafe extern "C" fn start() -> ! {
 .endif
     sub     sp, sp, t0
     csrw    mscratch, zero
-    j       main
+    j       _start_rust
     
 _start_abort:
     wfi
@@ -93,7 +93,8 @@ _start_abort:
 ", options(noreturn))
 }
 
-#[export_name = "main"]
+#[link_section = ".init.rust"]
+#[export_name = "_start_rust"]
 fn main() -> ! {
     // Ref: https://github.com/qemu/qemu/blob/aeb07b5f6e69ce93afea71027325e3e7a22d2149/hw/riscv/boot.c#L243
     // 设备树的物理地址，操作系统会从 `a1` 寄存器里面读取设备树
@@ -345,6 +346,7 @@ struct TrapFrame {
     a7: usize,
 }
 
+#[link_section = ".trap.rust"]
 #[export_name = "_start_trap_rust"]
 extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
     let cause = mcause::read().cause();
