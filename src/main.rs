@@ -224,7 +224,7 @@ fn main() -> ! {
     if mhartid::read() == 0 {
         println!("[rustsbi] RustSBI version {}", rustsbi::VERSION);
         println!("{}", rustsbi::LOGO);
-        println!("[[rutsbi] Platform: XiangShan (Version {})", env!("CARGO_PKG_VERSION"));
+        println!("[rutsbi] Platform: XiangShan (Version {})", env!("CARGO_PKG_VERSION"));
         let isa = misa::read();
         if let Some(isa) = isa {
             let mxl_str = match isa.mxl() {
@@ -360,7 +360,7 @@ extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
             trapframe.a0 = ans.error;
             trapframe.a1 = ans.value;
             // Add `mepc` with 4 to skip ecall instruction
-
+            mepc::write(mepc::read().wrapping_add(4));
         },
         Trap::Interrupt(Interrupt::MachineSoft) => {
             // Return the machine soft interrupt to S mode
