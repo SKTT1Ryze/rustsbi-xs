@@ -52,7 +52,22 @@ pub extern "C" fn mp_hook() -> bool {
     } else {
         #[allow(unused_imports)]
         use riscv::asm::wfi;
-        // TODO: handle IPI
+        let clint = unsafe { xs_hal::Clint::new() };
+        // Clear IPI
+        clint.clear_soft(hartid);
+        unsafe {
+            // Start listening for software interrupts
+            mie::set_msoft();
+            loop {
+                wfi();
+                if mip::read().msoft() {
+                    break;
+                }
+            }
+            // Stop listening for software interrupts
+            mie::clear_msoft();
+        }
+        clint.clear_soft(hartid);
         false
     }
 }
@@ -224,7 +239,7 @@ fn main() -> ! {
     if mhartid::read() == 0 {
         println!("[rustsbi] RustSBI version {}", rustsbi::VERSION);
         println!("{}", rustsbi::LOGO);
-        println!("[rutsbi] Platform: XiangShan (Version {})", env!("CARGO_PKG_VERSION"));
+        println!("[rustsbi] Platform: XiangShan (Version {})", env!("CARGO_PKG_VERSION"));
         let isa = misa::read();
         if let Some(isa) = isa {
             let mxl_str = match isa.mxl() {
