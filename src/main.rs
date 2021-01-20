@@ -13,10 +13,10 @@ extern crate nb;
 
 #[cfg(not(test))]
 use core::alloc::Layout;
+use core::panic;
 #[cfg(not(test))]
 use core::panic::PanicInfo;
 use buddy_system_allocator::LockedHeap;
-#[allow(unused_imports)]
 use riscv::register::{
     mtval,
     mstatus::{self, MPP},
@@ -96,6 +96,7 @@ _start_abort:
 #[export_name = "main"]
 fn main() -> ! {
     // Ref: https://github.com/qemu/qemu/blob/aeb07b5f6e69ce93afea71027325e3e7a22d2149/hw/riscv/boot.c#L243
+    // 设备树的物理地址，操作系统会从 `a1` 寄存器里面读取设备树
     let dtb_pa = unsafe {
         let dtb_pa: usize;
         llvm_asm!("":"={a1}"(dtb_pa));
@@ -242,15 +243,14 @@ fn main() -> ! {
         println!("[rustsbi] Kernel entry: 0x80200000");
         
     }
-    // block here
-    loop {}
-    
+
     unsafe {
         mepc::write(s_mode_start as usize);
         mstatus::set_mpp(MPP::Supervisor);
         rustsbi::enter_privileged(mhartid::read(), dtb_pa)
     }
 }
+
 // Ref: https://github.com/luojia65/rustsbi/blob/master/platform/qemu/src/main.rs
 #[naked]
 #[link_section = ".text"] // must add link section for all naked functions
@@ -346,6 +346,72 @@ struct TrapFrame {
 }
 
 #[export_name = "_start_trap_rust"]
-extern "C" fn start_trap_rust(_trapframe: &mut TrapFrame) {
-    todo!()
+extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
+    let cause = mcause::read().cause();
+    match cause {
+        Trap::Exception(Exception::SupervisorEnvCall) => {
+            let params = [trapframe.a0, trapframe.a1, trapframe.a2, trapframe.a3];
+            // Call RustSBI ecall handler
+            let ans = rustsbi::ecall(trapframe.a7, trapframe.a6, params);
+            // Write the return value to TrapFrame
+            trapframe.a0 = ans.error;
+            trapframe.a1 = ans.value;
+            // Add `mepc` with 4 to skip ecall instruction
+
+        },
+        Trap::Interrupt(Interrupt::MachineSoft) => {
+            // Return the machine soft interrupt to S mode
+            unsafe {
+                // `mie` 负责中断使能
+                // `mip` 列出当前正准备处理的中断
+                // 设置 `mip` 的 `SSIP` 位和
+                // 清除 `mie` 的 `MSIE` 位
+                // 使得操作系统回到 S 态处理软件中断
+                mip::set_ssoft();
+                mie::clear_msoft();
+            }
+        }
+        Trap::Interrupt(Interrupt::MachineTimer) => {
+            // Return the machine timer interrupt to S mode
+            unsafe {
+                // 设置 `mip` 的 `STIP` 位和
+                // 清除 `mie` 的 `MTIE` 位
+                // 使得操作系统回到 S 态处理时钟中断
+                mip::set_stimer();
+                mie::clear_mtimer();
+            }
+        }
+        Trap::Exception(Exception::IllegalInstruction) => {
+            // 操作系统执行非法指令会陷入到这里
+            // TODO: handle debug instruction
+            // #[inline]
+            // unsafe fn get_vaddr_u32(vaddr: usize) -> u32 {
+            //     let mut ans: u32;
+            //     llvm_asm!("
+            //         li      t0, (1 << 17)
+            //         mv      t1, $1
+            //         csrrs   t0, mstatus, t0
+            //         lwu     t1, 0(t1)
+            //         csrw    mstatus, t0
+            //         mv      $0, t1
+            //     "
+            //         :"=r"(ans) 
+            //         :"r"(vaddr)
+            //         :"t0", "t1");
+            //     ans
+            // }
+            // // Decode illegal instruction
+            // let va = mepc::read();
+            // let instr = unsafe { get_vaddr_u32(va) };
+            todo!()
+        }
+        unknown_cause => panic!(
+            "Unhandled exception! mcause: {:?}, mepc: {:016x?}, mtval: {:016x?}, trapframe: {:p}, {:x?}",
+            unknown_cause,
+            mepc::read(),
+            mtval::read(),
+            &trapframe as *const _,
+            trapframe
+        )
+    }
 }
