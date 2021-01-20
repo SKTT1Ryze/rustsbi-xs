@@ -242,7 +242,9 @@ fn main() -> ! {
         println!("[rustsbi] Kernel entry: 0x80200000");
         
     }
-
+    // block here
+    loop {}
+    
     unsafe {
         mepc::write(s_mode_start as usize);
         mstatus::set_mpp(MPP::Supervisor);

@@ -12,6 +12,7 @@ buddy_system_allocator = "0.6.0"
 riscv = { git = "https://github.com/rust-embedded/riscv", features = ["inline-asm"] }
 spin = "0.7"
 ansi_rgb = "0.2.0"
+# xs-hal = { git = "https://github.com/SKTT1Ryze/xs-hal" }
 xs-hal = { path = "../xs-hal" }
 embedded-hal = "1.0.0-alpha.1"
 nb = "1"
