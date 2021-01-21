@@ -26,6 +26,14 @@ use riscv::register::{
 };
 use rustsbi::{print, println};
 
+struct Reset;
+impl rustsbi::Reset for Reset {
+    fn system_reset(&self, reset_type: usize, reset_reason: usize) -> rustsbi::SbiRet {
+        println!("[rustsbi] reset triggered! todo: shutdown all harts on XS; program halt. Type: {}, reason: {}", reset_type, reset_reason);
+        loop {}
+    }
+}
+
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
@@ -34,7 +42,11 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 fn panic(info: &PanicInfo) -> ! {
     println!("[rustsbi-panic] {}", info);
     println!("[rustsbi-panic] system shutdown scheduled due to RustSBI panic");
-    // TODO: system reset
+    use rustsbi::Reset;
+    Reset.system_reset(
+        rustsbi::reset::RESET_TYPE_SHUTDOWN,
+        rustsbi::reset::RESET_REASON_SYSTEM_FAILURE
+    );
     loop {}
 }
 
@@ -206,15 +218,7 @@ fn main() -> ! {
         }
         rustsbi::init_timer(Timer);
         // Init Reset
-        struct Reset;
-        impl rustsbi::Reset for Reset {
-            fn system_reset(&self, reset_type: usize, reset_reason: usize) -> rustsbi::SbiRet {
-                println!("[rustsbi] reset triggered! todo: shutdown all harts on XS; program halt. Type: {}, reason: {}", reset_type, reset_reason);
-                loop {}
-            }
-        }
-        use rustsbi::init_reset;
-        init_reset(Reset);
+        rustsbi::init_reset(Reset);
     }
 
     // set mideleg
