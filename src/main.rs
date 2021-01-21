@@ -37,6 +37,7 @@ impl rustsbi::Reset for Reset {
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
+// Ref: https://github.com/luojia65/rustsbi/blob/master/platform/qemu/src/main.rs
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -366,6 +367,7 @@ struct TrapFrame {
     a7: usize,
 }
 
+// Ref: https://github.com/luojia65/rustsbi/blob/master/platform/qemu/src/main.rs
 #[link_section = ".trap.rust"]
 #[export_name = "_start_trap_rust"]
 extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
@@ -426,6 +428,7 @@ extern "C" fn start_trap_rust(trapframe: &mut TrapFrame) {
             let instr = unsafe { get_vaddr_u32(va) };
             if instr & 0xFFFFF07F == 0xC0102073 {
                 // rdtime instruction
+                // 处理 `rdtime` 指令
                 let rd = ((instr >> 7) & 0b1_1111) as u8;
                 let clint = unsafe { xs_hal::Clint::new() };
                 let mtime = clint.get_mtime() as usize;
